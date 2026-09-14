@@ -475,15 +475,351 @@ body {
         padding: 8px 10px;
     }
 }
+
+/* =========================
+   TELA DE ACESSO POR E-MAIL
+========================= */
+
+.tela-acesso {
+    background: white;
+    padding: clamp(25px, 5vh, 45px);
+    border-radius: 18px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.10);
+    text-align: center;
+}
+
+.tela-acesso form {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(10px, 1.5vh, 15px);
+    text-align: left;
+    margin-top: 15px;
+}
+
+.campo-grupo {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.campo-grupo label {
+    font-size: clamp(12px, 1.8vh, 15px);
+    font-weight: bold;
+    color: #444;
+}
+
+.input-email {
+    width: 100%;
+    padding: clamp(10px, 1.8vh, 15px);
+    border: 2px solid #ddd;
+    background: white;
+    border-radius: 10px;
+    font-size: clamp(13px, 2vh, 16px);
+    font-family: inherit;
+    color: #333;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-email:focus {
+    border-color: #3158a6;
+    box-shadow: 0 0 0 3px rgba(49, 88, 166, 0.15);
+}
+
+.input-email.input-erro {
+    border-color: #dc3545;
+    background-color: #fff8f8;
+}
+
+.btn-acesso {
+    width: 100%;
+    margin-top: clamp(8px, 1.5vh, 15px);
+    padding: clamp(10px, 1.8vh, 15px);
+    border: none;
+    border-radius: 10px;
+    background: #3158a6;
+    color: white;
+    font-size: clamp(13px, 2vh, 16px);
+    font-weight: bold;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.btn-acesso:hover {
+    opacity: 0.9;
+}
+
+.btn-acesso:disabled {
+    background: #aaa;
+    cursor: not-allowed;
+}
+
+/* Botão de Logout discreto */
+.top-bar-logout {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+}
+
+.btn-logout {
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    color: #64748b;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: clamp(11px, 1.6vh, 13px);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+}
+
+.btn-logout:hover {
+    background: #fcebec;
+    color: #b02a37;
+    border-color: #f87171;
+}
 </style>
+<script type="application/json" id="authorized-users-data">
+{
+  "users": [
+    {
+      "email": "morpiscompany@outlook.com",
+      "active": true
+    },
+    {
+      "email": "usuario2@email.com",
+      "active": true
+    },
+    {
+      "email": "usuario3@email.com",
+      "active": true
+    },
+    {
+      "email": "usuario4@email.com",
+      "active": true
+    },
+    {
+      "email": "cliente@email.com",
+      "active": true
+    },
+    {
+      "email": "bloqueado@email.com",
+      "active": false
+    }
+  ]
+}
+</script>
+<script>
+/**
+ * Módulo de Autenticação e Controle de Acesso
+ * Centraliza o carregamento de e-mails autorizados, normalização, validação e gestão de sessão.
+ */
+
+const SESSION_KEY = 'simulado_auth_session';
+
+class AuthService {
+    constructor() {
+        this.usersCache = null;
+    }
+
+    /**
+     * Carrega a lista de usuários autorizados a partir do JSON incorporado.
+     * Cacheia em memória para chamadas subsequentes.
+     */
+    async loadUsers() {
+        if (this.usersCache !== null) {
+            return this.usersCache;
+        }
+
+        try {
+            const dataElement = document.getElementById('authorized-users-data');
+            if (!dataElement) {
+                throw new Error('Elemento authorized-users-data não encontrado.');
+            }
+            const data = JSON.parse(dataElement.textContent);
+            this.usersCache = Array.isArray(data.users) ? data.users : [];
+            return this.usersCache;
+        } catch (error) {
+            console.error('Erro ao carregar lista de usuários autorizados:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Normaliza a string do e-mail:
+     * - Remove espaços antes e depois (trim)
+     * - Converte para letras minúsculas (toLowerCase)
+     */
+    normalizeEmail(email) {
+        if (typeof email !== 'string') return '';
+        return email.trim().toLowerCase();
+    }
+
+    /**
+     * Valida se a string possui um formato básico de e-mail.
+     */
+    isValidEmailFormat(email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
+
+    /**
+     * Autentica o e-mail informado pelo usuário:
+     * 1. Valida campo preenchido
+     * 2. Valida formato do e-mail
+     * 3. Consulta lista de e-mails autorizados
+     * 4. Verifica se active === true
+     * 5. Se autorizado, cria a sessão no sessionStorage
+     */
+    async authenticate(rawEmail) {
+        const normalizedInput = this.normalizeEmail(rawEmail);
+
+        if (!normalizedInput) {
+            return {
+                success: false,
+                message: 'Por favor, digite seu e-mail.'
+            };
+        }
+
+        if (!this.isValidEmailFormat(normalizedInput)) {
+            return {
+                success: false,
+                message: 'Por favor, informe um e-mail válido.'
+            };
+        }
+
+        const users = await this.loadUsers();
+
+        if (users === null) {
+            return {
+                success: false,
+                message: 'Erro ao carregar a lista de e-mails autorizados. Verifique sua conexão.'
+            };
+        }
+
+        const userFound = users.find(u => this.normalizeEmail(u.email) === normalizedInput);
+
+        if (!userFound || userFound.active !== true) {
+            return {
+                success: false,
+                message: 'E-mail não autorizado.'
+            };
+        }
+
+        // Usuário autorizado e ativo
+        this.setSession(normalizedInput);
+
+        return {
+            success: true,
+            user: normalizedInput
+        };
+    }
+
+    /**
+     * Salva os dados de acesso no sessionStorage.
+     */
+    setSession(email) {
+        try {
+            const sessionData = {
+                email: email,
+                authenticatedAt: new Date().toISOString()
+            };
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
+        } catch (e) {
+            console.error('Erro ao salvar sessão no sessionStorage:', e);
+        }
+    }
+
+    /**
+     * Recupera os dados da sessão atual.
+     */
+    getSession() {
+        try {
+            const rawSession = sessionStorage.getItem(SESSION_KEY);
+            return rawSession ? JSON.parse(rawSession) : null;
+        } catch (e) {
+            console.error('Erro ao ler sessão do sessionStorage:', e);
+            return null;
+        }
+    }
+
+    /**
+     * Verifica se existe uma sessão válida de usuário autenticado.
+     */
+    isAuthenticated() {
+        const session = this.getSession();
+        return Boolean(session && session.email);
+    }
+
+    /**
+     * Encerra a sessão atual.
+     */
+    logout() {
+        try {
+            sessionStorage.removeItem(SESSION_KEY);
+        } catch (e) {
+            console.error('Erro ao remover sessão:', e);
+        }
+    }
+}
+
+// Instância global para uso na aplicação
+window.authService = new AuthService();
+</script>
 </head>
 
 <body>
 
     <main class="container">
 
+        <!-- BOTÃO DE LOGOUT DISCRETO (EXIBIDO APÓS AUTENTICAÇÃO) -->
+        <div id="container-logout" class="top-bar-logout escondido">
+            <button id="btn-logout" class="btn-logout" onclick="executarLogout()">
+                <span>🚪</span>
+                <span id="txt-logout">Sair</span>
+            </button>
+        </div>
+
+        <!-- TELA DE ACESSO -->
+        <section id="tela-acesso" class="tela-acesso">
+
+            <div class="logo-medico">🩺</div>
+
+            <h1>Simulado de Semiologia</h1>
+
+            <p class="subtitulo">
+                Acesso Restrito
+            </p>
+
+            <form id="form-acesso" onsubmit="event.preventDefault(); executarAcesso();" novalidate>
+
+                <div class="campo-grupo">
+                    <label for="input-email">Digite seu e-mail para continuar:</label>
+                    <input
+                        type="email"
+                        id="input-email"
+                        class="input-email"
+                        placeholder="seuemail@exemplo.com"
+                        autocomplete="email"
+                        required
+                    />
+                </div>
+
+                <div id="acesso-erro" class="feedback errado escondido"></div>
+
+                <button type="submit" id="btn-entrar" class="btn-acesso">
+                    Entrar
+                </button>
+
+            </form>
+
+        </section>
+
         <!-- TELA DE ESCOLHA DO IDIOMA -->
-        <section id="tela-idioma" class="tela-idioma">
+        <section id="tela-idioma" class="tela-idioma escondido">
 
             <div class="logo-medico">🩺</div>
 
@@ -2000,6 +2336,15 @@ function selecionarIdioma(novoIdioma) {
     }
 
 
+    const txtLogout = document.getElementById("txt-logout");
+
+    if (txtLogout) {
+
+        txtLogout.textContent = idioma === "es" ? "Salir" : "Sair";
+
+    }
+
+
     const t = textosAtuais();
 
 
@@ -2544,25 +2889,202 @@ function iniciar() {
 
 // ============================================================
 
+// CONTROLE DE ACESSO E SESSÃO
+
+// ============================================================
+
+
+async function executarAcesso() {
+
+    const emailInput = document.getElementById("input-email");
+
+    const btnEntrar = document.getElementById("btn-entrar");
+
+    const erroElemento = document.getElementById("acesso-erro");
+
+
+    if (!emailInput || !btnEntrar || !erroElemento) return;
+
+
+    // Limpa estado prévio de erros
+
+    erroElemento.classList.add("escondido");
+
+    erroElemento.textContent = "";
+
+    emailInput.classList.remove("input-erro");
+
+
+    btnEntrar.disabled = true;
+
+    const textoOriginalBtn = btnEntrar.textContent;
+
+    btnEntrar.textContent = "Verificando...";
+
+
+    try {
+
+        const resultado = await window.authService.authenticate(emailInput.value);
+
+
+        if (resultado.success) {
+
+            exibirSistemaAposAcesso();
+
+        } else {
+
+            erroElemento.textContent = resultado.message;
+
+            erroElemento.classList.remove("escondido");
+
+            emailInput.classList.add("input-erro");
+
+            emailInput.focus();
+
+        }
+
+    } catch (error) {
+
+        console.error("Erro na autenticação:", error);
+
+        erroElemento.textContent = "Ocorreu um erro ao verificar a autorização. Tente novamente.";
+
+        erroElemento.classList.remove("escondido");
+
+    } finally {
+
+        btnEntrar.disabled = false;
+
+        btnEntrar.textContent = textoOriginalBtn;
+
+    }
+
+}
+
+
+function executarLogout() {
+
+    window.authService.logout();
+
+
+    const telaAcesso = document.getElementById("tela-acesso");
+
+    const telaIdioma = document.getElementById("tela-idioma");
+
+    const telaJogo = document.getElementById("tela-jogo");
+
+    const containerLogout = document.getElementById("container-logout");
+
+    const emailInput = document.getElementById("input-email");
+
+    const erroElemento = document.getElementById("acesso-erro");
+
+
+    if (telaJogo) telaJogo.classList.add("escondido");
+
+    if (telaIdioma) telaIdioma.classList.add("escondido");
+
+    if (containerLogout) containerLogout.classList.add("escondido");
+
+    if (telaAcesso) telaAcesso.classList.remove("escondido");
+
+
+    if (emailInput) {
+
+        emailInput.value = "";
+
+        emailInput.classList.remove("input-erro");
+
+    }
+
+
+    if (erroElemento) {
+
+        erroElemento.classList.add("escondido");
+
+        erroElemento.textContent = "";
+
+    }
+
+}
+
+
+function exibirSistemaAposAcesso() {
+
+    const telaAcesso = document.getElementById("tela-acesso");
+
+    const telaIdioma = document.getElementById("tela-idioma");
+
+    const telaJogo = document.getElementById("tela-jogo");
+
+    const containerLogout = document.getElementById("container-logout");
+
+
+    if (telaAcesso) telaAcesso.classList.add("escondido");
+
+    if (containerLogout) containerLogout.classList.remove("escondido");
+
+
+    if (telaIdioma) {
+
+        telaIdioma.classList.remove("escondido");
+
+    } else if (telaJogo) {
+
+        telaJogo.classList.remove("escondido");
+
+        iniciar();
+
+    }
+
+}
+
+
+function verificarAcessoInicial() {
+
+    if (window.authService.isAuthenticated()) {
+
+        exibirSistemaAposAcesso();
+
+    } else {
+
+        const telaAcesso = document.getElementById("tela-acesso");
+
+        const telaIdioma = document.getElementById("tela-idioma");
+
+        const telaJogo = document.getElementById("tela-jogo");
+
+        const containerLogout = document.getElementById("container-logout");
+
+
+        if (telaAcesso) telaAcesso.classList.remove("escondido");
+
+        if (telaIdioma) telaIdioma.classList.add("escondido");
+
+        if (telaJogo) telaJogo.classList.add("escondido");
+
+        if (containerLogout) containerLogout.classList.add("escondido");
+
+    }
+
+}
+
+
+window.executarAcesso = executarAcesso;
+
+window.executarLogout = executarLogout;
+
+
+
+// ============================================================
+
 // INICIALIZAÇÃO
 
 // ============================================================
 
 
-// Se a tela de idioma existir, esperamos o usuário escolher.
+verificarAcessoInicial();
 
-// Se não existir, o simulado começa automaticamente em português.
-
-
-if (
-
-    !document.getElementById("tela-idioma")
-
-) {
-
-    iniciar();
-
-}
 
 window.selecionarIdioma = selecionarIdioma;
 
